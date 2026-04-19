@@ -1,16 +1,7 @@
 import { Transform, Type } from 'class-transformer';
-import {
-  ArrayUnique,
-  IsArray,
-  IsLatitude,
-  IsLongitude,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MinLength,
-} from 'class-validator';
+import { ArrayUnique, IsArray, IsLatitude, IsLongitude, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
-export class CreatePlaceDto {
+export class CreatePlaceRequestDto {
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   name: string;
