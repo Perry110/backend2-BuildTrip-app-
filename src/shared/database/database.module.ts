@@ -1,13 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SequelizeModule } from '@nestjs/sequelize';
-import { Comment } from '../../modules/comments/entities/comment.entity';
-import { Category } from '../../modules/place/entities/category.entity';
-import { Place } from '../../modules/place/entities/place.entity';
-import { Tag } from '../../modules/place/entities/tag.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { Trip } from '../../modules/trips/entities/trip.entity';
 import { TripPlace } from '../../modules/trips/entities/trip-place.entity';
-import { User } from '../../modules/users/entities/user.entity';
 
 /**
  * Kết nối PostgreSQL + đăng ký models dùng chung toàn app.
@@ -15,6 +11,21 @@ import { User } from '../../modules/users/entities/user.entity';
  */
 @Module({
   imports: [
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get<string>('DB_HOST', 'localhost'),
+        port: parseInt(config.get<string>('DB_PORT', '5432'), 10),
+        username: config.get<string>('DB_USER', 'postgres'),
+        password: config.get<string>('DB_PASSWORD', ''),
+        database: config.get<string>('DB_NAME', 'postgres'),
+        autoLoadEntities: true,
+        synchronize: false,
+        logging: config.get<string>('NODE_ENV') === 'development',
+      }),
+    }),
     SequelizeModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -30,7 +41,7 @@ import { User } from '../../modules/users/entities/user.entity';
             ? console.log
             : false,
         pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
-        models: [User, Place, Category, Tag, Trip, TripPlace, Comment],
+        models: [Trip, TripPlace],
         synchronize: false,
         autoLoadModels: false,
       }),

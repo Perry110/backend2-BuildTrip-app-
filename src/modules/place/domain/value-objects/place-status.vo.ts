@@ -1,20 +1,17 @@
-export type PlaceStatusValue = 'pending' | 'published' | 'rejected';
+export enum PlaceStatus {
+  PENDING = 'pending',
+  PUBLISHED = 'published',
+  REJECTED = 'rejected',
+}
 
-export class PlaceStatus {
-  private constructor(readonly value: PlaceStatusValue) {}
+export class PlaceStatusVo {
+  constructor(public readonly value: PlaceStatus) {}
 
-  static published(): PlaceStatus {
-    return new PlaceStatus('published');
-  }
-
-  static from(value: string): PlaceStatus {
-    if (value === 'pending' || value === 'published' || value === 'rejected') {
-      return new PlaceStatus(value as PlaceStatusValue);
+  static from(value: string): PlaceStatusVo {
+    const normalized = value.trim().toLowerCase();
+    if (!Object.values(PlaceStatus).includes(normalized as PlaceStatus)) {
+      throw new Error(`Invalid place status: ${value}`);
     }
-    throw new Error(`Trạng thái địa điểm không hợp lệ: ${value}`);
-  }
-
-  equals(other: PlaceStatus): boolean {
-    return this.value === other.value;
+    return new PlaceStatusVo(normalized as PlaceStatus);
   }
 }

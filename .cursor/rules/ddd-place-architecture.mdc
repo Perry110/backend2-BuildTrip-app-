@@ -1,0 +1,137 @@
+---
+alwaysApply: true
+---
+# DDD Architecture — Place Module
+
+## Layer Responsibilities
+
+### Domain (src/modules/place/domain/)
+The pure core — zero framework dependencies, zero imports from outer layers.
+
+- `aggregates/` — Aggregate roots enforce business invariants. All mutations go through the root.
+- `value-objects/` — Immutable, self-validating objects (no setters, throw on invalid input).
+- `events/` — Plain data objects describing something that happened inside the domain.
+
+**Rules:**
+- Domain MUST NOT import from `application/` or `infrastructure/`.
+- Aggregates MUST validate all state transitions internally.
+- Value objects MUST be immutable (use `readonly` on all fields).
+- Domain events MUST be named in past tense: `PlaceCreatedEvent`, `ReviewAddedEvent`.
+
+```typescript
+// ✅ GOOD — value object is immutable and self-validates
+export class Location {
+  constructor(
+    readonly lat: number,
+    readonly lng: number,
+  ) {
+    if (lat < -90 || lat > 90) throw new Error('Invalid latitude');
+    if (lng < -180 || lng > 180) throw new Error('Invalid longitude');
+  }
+}
+
+// ❌ BAD — mutable, no validation
+export class Location {
+  lat: number;
+  lng: number;
+}
+```
+
+---
+
+### Application (src/modules/place/application/)
+Orchestrates use cases — no business logic, only coordination.
+
+- `commands/` — Write side (CQRS). Use case files named `<verb>-<noun>.use-case.ts`.
+- `queries/` — Read side (CQRS). Handler files named `<verb>-<noun>.handler.ts`. MAY bypass domain.
+- `ports/` — Interfaces (contracts) the application depends on. Named `<noun>.port.ts`.
+
+**Rules:**
+- Commands MUST load aggregate via port → mutate → persist via port → emit events.
+- Queries MUST NOT load domain aggregates — read directly from the read-model repository port.
+- Application MUST NOT import from `infrastructure/` directly — only via port interfaces.
+- A use case MUST do exactly one thing. Split if multiple responsibilities emerge.
+
+```typescript
+// ✅ GOOD — command use case pattern
+export class CreatePlaceUseCase {
+  constructor(private readonly placeRepo: PlaceRepositoryPort) {}
+
+  async execute(cmd: CreatePlaceCommand): Promise<void> {
+    const place = Place.create(cmd);   // domain logic inside aggregate
+    await this.placeRepo.save(place);
+  }
+}
+
+// ❌ BAD — business logic leaking into application layer
+async execute(cmd: CreatePlaceCommand): Promise<void> {
+  if (cmd.name.length < 3) throw new Error('Too short'); // belongs in domain
+  await this.placeRepo.save(cmd);
+}
+```
+
+---
+
+### Presentation (src/modules/place/presentation/)
+HTTP entrypoints for the module.
+
+- Controllers translate HTTP request/response to application commands and queries.
+
+### Infrastructure (src/modules/place/infrastructure/)
+External implementations that satisfy output ports.
+
+- `driven-adapters/` — Repository implementations. Implement ports defined in `application/ports/`.
+
+**Rules:**
+- Controllers MUST NOT contain business logic — delegate entirely to use cases / query handlers.
+- Repository implementations MUST implement the corresponding port interface.
+- Naming: `postgres-<noun>.repository.ts`, `postgis-<noun>.repository.ts`, `<noun>.controller.ts`.
+- Write repositories use PostgreSQL; read repositories use PostGIS for spatial queries.
+
+```typescript
+// ✅ GOOD — thin controller
+export class CatalogController {
+  constructor(private readonly searchNearest: SearchNearestHandler) {}
+
+  async search(req: Request, res: Response) {
+    const result = await this.searchNearest.handle(req.query);
+    res.json(result);
+  }
+}
+
+// ❌ BAD — controller doing DB work
+async search(req: Request, res: Response) {
+  const places = await db.query('SELECT * FROM places WHERE ...');
+  res.json(places);
+}
+```
+
+---
+
+## Dependency Direction (strictly enforced)
+
+```
+presentation → application → domain
+infrastructure → application → domain
+```
+
+**Never allow:**
+- `domain` importing from `application` or `infrastructure`
+- `application` importing from `infrastructure`
+- `application` importing from `presentation`
+- Cross-module imports without going through a published port
+
+---
+
+## File Naming Convention
+
+| Layer | Pattern | Example |
+|-------|---------|---------|
+| Aggregate root | `<noun>.root.ts` | `place.root.ts` |
+| Value object | `<noun>.vo.ts` | `location.vo.ts` |
+| Domain event | `<noun>.event.ts` | `place-created.event.ts` |
+| Command use case | `<verb>-<noun>.use-case.ts` | `create-place.use-case.ts` |
+| Query handler | `<verb>-<noun>.handler.ts` | `search-nearest.handler.ts` |
+| Port interface | `<noun>.port.ts` | `place-repository.port.ts` |
+| Repository impl | `<db>-<noun>.repository.ts` | `postgres-place.repository.ts` |
+| Controller | `<context>.controller.ts` | `catalog.controller.ts` |

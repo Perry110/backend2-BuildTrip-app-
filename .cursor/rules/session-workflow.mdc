@@ -1,0 +1,66 @@
+---
+description: Workflow rule — AI agent must read docs/architecture-context.md before every session and update the Session Log after completing work
+alwaysApply: true
+---
+
+# Session Workflow — Đọc & Cập nhật Context
+
+## BẮT ĐẦU PHIÊN LÀM VIỆC
+
+**Bước đầu tiên bắt buộc** trước khi thực hiện bất kỳ thay đổi nào:
+
+1. Đọc file `docs/architecture-context.md`
+2. Xác nhận hiểu: kiến trúc hiện tại, trạng thái các module, quyết định đã có
+3. Nếu yêu cầu của người dùng mâu thuẫn với kiến trúc đã ghi, hỏi lại trước khi tiến hành
+
+```
+// Luôn bắt đầu bằng:
+Read: backend2\docs\architecture-context.md
+```
+
+---
+
+## KẾT THÚC PHIÊN LÀM VIỆC
+
+**Sau khi hoàn thành công việc**, cập nhật `docs/architecture-context.md` tại mục **Session Log** với:
+
+```markdown
+### YYYY-MM-DD — <Tiêu đề ngắn mô tả phiên>
+- **Việc đã làm:** <Liệt kê cụ thể các thay đổi>
+- **Files thay đổi:** <Danh sách file tạo mới / sửa / xóa>
+- **Quyết định:** <Các quyết định thiết kế / kỹ thuật quan trọng>
+- **Vấn đề còn tồn đọng:** <Bugs, TODO, hoặc điểm cần chú ý>
+- **Việc tiếp theo:** <Bước tiếp theo được đề xuất>
+```
+
+### Quy tắc cập nhật
+
+- **Thêm entry mới** ở ĐẦU mục Session Log (mới nhất lên trên)
+- **Không xóa** các entry cũ — chúng là lịch sử quyết định
+- Cập nhật bảng **Trạng thái hiện tại** trong docs nếu có thay đổi lớn về trạng thái module
+- Nếu thêm module mới, bổ sung phần mô tả vào docs
+
+---
+
+## KHI NÀO CẦN CẬP NHẬT NGAY (không đợi cuối phiên)
+
+- Thêm dependency mới vào dự án
+- Thay đổi kiến trúc tổng thể (thêm tầng, đổi pattern)
+- Xóa hoặc rename module lớn
+- Quyết định kỹ thuật không thể đảo ngược
+
+---
+
+## Ví dụ Session Log đúng chuẩn
+
+```markdown
+### 2026-04-22 — Implement Domain Layer cho Place module
+- **Việc đã làm:** Tạo place.root.ts, location.vo.ts, place-created.event.ts
+- **Files thay đổi:**
+  - Tạo mới: `src/modules/place/domain/aggregates/place/place.root.ts`
+  - Tạo mới: `src/modules/place/domain/value-objects/location.vo.ts`
+  - Tạo mới: `src/modules/place/domain/events/place-created.event.ts`
+- **Quyết định:** Location VO throw Error khi lat/lng ngoài range — không dùng Result type
+- **Vấn đề còn tồn đọng:** Chưa có unit test cho domain layer
+- **Việc tiếp theo:** Implement application/ports/ interfaces
+```

@@ -5,10 +5,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
-import { InjectModel } from '@nestjs/sequelize';
+import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { Op } from 'sequelize';
+import { Repository } from 'typeorm';
 import { ResponseCommon } from '../../common/dto/response.dto';
 import { User } from '../users/entities/user.entity';
 import { RedisService } from '../../shared/redis/redis.service';
@@ -28,8 +28,8 @@ export class AuthService {
   private readonly passwordResetTokenTtlSeconds = 15 * 60;
 
   constructor(
-    @InjectModel(User)
-    private readonly userModel: typeof User,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly jwtTokenService: JwtTokenService,
     private readonly redisService: RedisService,
   ) {}
@@ -106,10 +106,8 @@ export class AuthService {
     const username = dto.username.toLowerCase();
     const email = dto.email.toLowerCase();
 
-    const existingUser = await this.userModel.findOne({
-      where: {
-        [Op.or]: [{ email }, { username }],
-      },
+    const existingUser = await this.userRepository.findOne({
+      where: [{ email }, { username }],
     });
 
     if (existingUser) {
@@ -134,12 +132,13 @@ export class AuthService {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
 
-    const newUser = await this.userModel.create({
+    const newUser = this.userRepository.create({
       username,
       email,
       hashedPassword,
       role: 'user',
     });
+    await this.userRepository.save(newUser);
     this.logger.log(`New user registered: ${newUser.role}`);
 
     return new ResponseCommon(
@@ -156,7 +155,7 @@ export class AuthService {
     const email = dto.email.toLowerCase();
     await this.throwIfLoginLocked(email);
 
-    const user = await this.userModel.findOne({
+    const user = await this.userRepository.findOne({
       where: { email },
     });
 
@@ -321,7 +320,7 @@ export class AuthService {
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const email = dto.email.toLowerCase();
-    const user = await this.userModel.findOne({ where: { email } });
+    const user = await this.userRepository.findOne({ where: { email } });
 
     let debugResetUrl: string | undefined;
     if (user) {
@@ -370,7 +369,7 @@ export class AuthService {
       );
     }
 
-    const user = await this.userModel.findByPk(userId);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       await redis.del(`auth:password-reset:${tokenHash}`);
       throw new HttpException(
@@ -386,7 +385,7 @@ export class AuthService {
     }
 
     user.hashedPassword = await bcrypt.hash(dto.newPassword, 10);
-    await user.save();
+    await this.userRepository.save(user);
     await redis.del(`auth:password-reset:${tokenHash}`);
 
     return new ResponseCommon(

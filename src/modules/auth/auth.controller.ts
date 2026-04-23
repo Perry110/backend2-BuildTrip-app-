@@ -82,3 +82,4 @@ export class AuthController {
     return new ResponseCommon(HttpStatus.OK, true, 'Success', user);
   }
 }
+// Chỉ đc return kết quả của service

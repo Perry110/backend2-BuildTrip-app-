@@ -1,61 +1,56 @@
 import {
-  Table,
   Column,
-  Model,
-  DataType,
-  Index,
-} from 'sequelize-typescript';
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
-/** ORM entity — bảng `users` (Sequelize). */
-@Table({
-  tableName: 'users',
-  underscored: true,
-  timestamps: true,
-})
-export class User extends Model {
-  @Column({
-    type: DataType.UUID,
-    defaultValue: DataType.UUIDV4,
-    primaryKey: true,
-  })
-  declare id: string;
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
 
-  @Index({ unique: true })
-  @Column({ type: DataType.STRING(50), allowNull: false })
-  declare username: string;
+  @Column({ type: 'varchar', length: 50, unique: true })
+  username!: string;
 
-  @Index({ unique: true })
-  @Column({ type: DataType.STRING(100), allowNull: false })
-  declare email: string;
+  @Column({ type: 'varchar', length: 100, unique: true })
+  email!: string;
 
-  @Column({ type: DataType.STRING(255), allowNull: false, field: 'hashed_password' })
-  declare hashedPassword: string;
+  @Column({ type: 'varchar', length: 255, name: 'hashed_password' })
+  hashedPassword!: string;
 
   @Column({
-    type: DataType.ENUM('user', 'member', 'admin'),
-    allowNull: false,
-    defaultValue: 'user',
+    type: 'enum',
+    enum: ['user', 'member', 'admin'],
+    default: 'user',
   })
-  declare role: 'user' | 'member' | 'admin';
+  role!: 'user' | 'member' | 'admin';
 
-  @Column({ type: DataType.STRING(20), allowNull: true })
-  declare phone: string | null;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phone!: string | null;
 
-  @Column({ type: DataType.STRING(100), allowNull: true })
-  declare city: string | null;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  city!: string | null;
 
-  @Column({ type: DataType.STRING(100), allowNull: true })
-  declare country: string | null;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  country!: string | null;
 
-  @Column({ type: DataType.TEXT, allowNull: true })
-  declare bio: string | null;
+  @Column({ type: 'text', nullable: true })
+  bio!: string | null;
 
-  @Column({ type: DataType.STRING(500), allowNull: true, field: 'avatar_url' })
-  declare avatarUrl: string | null;
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'avatar_url' })
+  avatarUrl!: string | null;
 
-  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' })
-  declare isActive: boolean;
+  @Column({ type: 'boolean', default: true, name: 'is_active' })
+  isActive!: boolean;
 
-  @Column({ type: DataType.JSONB, allowNull: true, defaultValue: {}, field: 'tag_preferences' })
-  declare tagPreferences: Record<string, unknown>;
+  @Column({ type: 'jsonb', nullable: true, default: () => "'{}'", name: 'tag_preferences' })
+  tagPreferences!: Record<string, unknown>;
+
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
+  updatedAt!: Date;
 }

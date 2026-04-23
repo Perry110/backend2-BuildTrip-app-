@@ -4,9 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
+import { InjectRepository } from '@nestjs/typeorm';
 import bcrypt from 'bcrypt';
-import { Op } from 'sequelize';
+import { Brackets, Repository } from 'typeorm';
 import { ResponseCommon } from '../../common/dto/response.dto';
 import { User } from './entities/user.entity';
 import { AccountUpdateDto } from './dto/account-update.dto';
@@ -43,8 +43,8 @@ export type PublicUserCard = {
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectModel(User)
-    private readonly userModel: typeof User,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   private toPublicProfile(user: User): PublicUserProfile {
@@ -78,7 +78,7 @@ export class UsersService {
 
   /** Tương đương `UserService.getAccountInfo` (nest-admin). */
   async getAccountInfo(userId: string) {
-    const user = await this.userModel.findByPk(userId);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -94,7 +94,7 @@ export class UsersService {
 
   /** Tương đương `UserService.updateAccountInfo` (nest-admin). */
   async updateAccountInfo(userId: string, dto: AccountUpdateDto) {
-    const user = await this.userModel.findByPk(userId);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -120,7 +120,7 @@ export class UsersService {
       user.tagPreferences = dto.tagPreferences;
     }
 
-    await user.save();
+    await this.userRepository.save(user);
 
     return new ResponseCommon(
       HttpStatus.OK,
@@ -132,7 +132,7 @@ export class UsersService {
 
   /** Tương đương `UserService.updatePassword` (nest-admin account). */
   async updatePassword(userId: string, dto: PasswordUpdateDto) {
-    const user = await this.userModel.findByPk(userId);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -155,7 +155,7 @@ export class UsersService {
 
     const saltRounds = 10;
     user.hashedPassword = await bcrypt.hash(dto.newPassword, saltRounds);
-    await user.save();
+    await this.userRepository.save(user);
 
     return new ResponseCommon(
       HttpStatus.OK,
@@ -170,29 +170,31 @@ export class UsersService {
     const pageSize = query.pageSize ?? 10;
     const offset = (page - 1) * pageSize;
 
-    const where: Record<string, unknown> = {};
+    const qb = this.userRepository.createQueryBuilder('user');
 
     if (query.role !== undefined) {
-      where.role = query.role;
+      qb.andWhere('user.role = :role', { role: query.role });
     }
     if (query.isActive !== undefined) {
-      where.isActive = query.isActive;
+      qb.andWhere('user.isActive = :isActive', { isActive: query.isActive });
     }
 
     if (query.keyword?.trim()) {
       const kw = `%${query.keyword.trim()}%`;
-      (where as { [Op.or]?: unknown })[Op.or] = [
-        { username: { [Op.iLike]: kw } },
-        { email: { [Op.iLike]: kw } },
-      ];
+      qb.andWhere(
+        new Brackets((subQb) => {
+          subQb
+            .where('user.username ILIKE :kw', { kw })
+            .orWhere('user.email ILIKE :kw', { kw });
+        }),
+      );
     }
 
-    const { rows, count } = await this.userModel.findAndCountAll({
-      where,
-      limit: pageSize,
-      offset,
-      order: [['createdAt', 'DESC']],
-    });
+    const [rows, count] = await qb
+      .orderBy('user.createdAt', 'DESC')
+      .skip(offset)
+      .take(pageSize)
+      .getManyAndCount();
 
     return new ResponseCommon(HttpStatus.OK, true, 'Users list', {
       list: rows.map((u) => this.toPublicProfile(u)),
@@ -203,7 +205,7 @@ export class UsersService {
   }
 
   async findUserById(id: string) {
-    const user = await this.userModel.findByPk(id);
+    const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -219,7 +221,7 @@ export class UsersService {
 
   async findUserByUsername(username: string) {
     const normalized = username.trim().toLowerCase();
-    const user = await this.userModel.findOne({
+    const user = await this.userRepository.findOne({
       where: { username: normalized },
     });
     if (!user) {
@@ -236,7 +238,7 @@ export class UsersService {
   }
 
   async findPublicUserById(id: string) {
-    const user = await this.userModel.findByPk(id);
+    const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -252,7 +254,7 @@ export class UsersService {
 
   async findPublicUserByUsername(username: string) {
     const normalized = username.trim().toLowerCase();
-    const user = await this.userModel.findOne({
+    const user = await this.userRepository.findOne({
       where: { username: normalized },
     });
     if (!user) {
@@ -272,8 +274,8 @@ export class UsersService {
     const username = dto.username.toLowerCase();
     const email = dto.email.toLowerCase();
 
-    const existingUser = await this.userModel.findOne({
-      where: { [Op.or]: [{ email }, { username }] },
+    const existingUser = await this.userRepository.findOne({
+      where: [{ email }, { username }],
     });
 
     if (existingUser) {
@@ -295,12 +297,13 @@ export class UsersService {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
 
-    const user = await this.userModel.create({
+    const user = this.userRepository.create({
       username,
       email,
       hashedPassword,
       role: dto.role ?? 'user',
     });
+    await this.userRepository.save(user);
 
     return new ResponseCommon(
       HttpStatus.CREATED,
@@ -311,7 +314,7 @@ export class UsersService {
   }
 
   async updateUser(id: string, dto: AdminUpdateUserDto) {
-    const user = await this.userModel.findByPk(id);
+    const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -324,15 +327,22 @@ export class UsersService {
       dto.email !== undefined ? dto.email.toLowerCase() : undefined;
 
     if (nextUsername !== undefined || nextEmail !== undefined) {
-      const conflict = await this.userModel.findOne({
-        where: {
-          id: { [Op.ne]: id },
-          [Op.or]: [
-            ...(nextUsername ? [{ username: nextUsername }] : []),
-            ...(nextEmail ? [{ email: nextEmail }] : []),
-          ],
-        },
-      });
+      const conflictQuery = this.userRepository
+        .createQueryBuilder('user')
+        .where('user.id <> :id', { id });
+
+      conflictQuery.andWhere(
+        new Brackets((qb) => {
+          if (nextUsername) {
+            qb.orWhere('user.username = :nextUsername', { nextUsername });
+          }
+          if (nextEmail) {
+            qb.orWhere('user.email = :nextEmail', { nextEmail });
+          }
+        }),
+      );
+
+      const conflict = await conflictQuery.getOne();
       if (conflict) {
         const field =
           nextEmail && conflict.email === nextEmail ? 'Email' : 'Username';
@@ -379,7 +389,7 @@ export class UsersService {
       user.tagPreferences = dto.tagPreferences;
     }
 
-    await user.save();
+    await this.userRepository.save(user);
 
     return new ResponseCommon(
       HttpStatus.OK,
@@ -402,20 +412,20 @@ export class UsersService {
       );
     }
 
-    const user = await this.userModel.findByPk(id);
+    const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
       );
     }
 
-    await user.destroy();
+    await this.userRepository.remove(user);
 
     return new ResponseCommon(HttpStatus.OK, true, 'User deleted', null);
   }
 
   async forceUpdatePassword(id: string, dto: UserPasswordDto) {
-    const user = await this.userModel.findByPk(id);
+    const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(
         new ResponseCommon(HttpStatus.NOT_FOUND, false, 'User not found', null),
@@ -424,7 +434,7 @@ export class UsersService {
 
     const saltRounds = 10;
     user.hashedPassword = await bcrypt.hash(dto.password, saltRounds);
-    await user.save();
+    await this.userRepository.save(user);
 
     return new ResponseCommon(
       HttpStatus.OK,
