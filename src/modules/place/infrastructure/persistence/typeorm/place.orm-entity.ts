@@ -27,8 +27,14 @@ export class PlaceOrmEntity {
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
-  @Column({ type: 'varchar', length: 100, name: 'category_id' })
-  category!: string;
+  @Column({ type: 'numeric', name: 'average_rating', precision: 3, scale: 2, nullable: true })
+  averageRating!: string | null;
+
+  @Column({ type: 'int', name: 'review_count', nullable: true, default: () => '0' })
+  reviewCount!: number | null;
+
+  @Column({ type: 'uuid', name: 'category_id', nullable: true })
+  category!: string | null;
 
   @Column({ type: 'jsonb', name: 'tag_scores', nullable: true, default: () => "'{}'" })
   tagScores!: Record<string, number> | null;

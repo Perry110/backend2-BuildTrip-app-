@@ -13,7 +13,7 @@ export class PlaceMapper {
       address: entity.address,
       lat: Number(entity.lat),
       lng: Number(entity.lng),
-      category: entity.category,
+      category: entity.category ?? 'uncategorized',
       tags: Object.keys(entity.tagScores ?? {}),
       ownerId,
       status: entity.status as PlaceStatus,

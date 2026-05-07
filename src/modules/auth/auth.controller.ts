@@ -6,6 +6,8 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
+  Redirect,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -16,9 +18,11 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import type { JwtUserPayload } from './services/jwt-token.service';
 
 /**
@@ -67,6 +71,35 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Get('forgot-password')
+  @Redirect()
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  forgotPasswordFromLink(@Query('token') token: string) {
+    return { url: this.authService.getForgotPasswordRedirectUrl(token) };
+  }
+
+  @Public()
+  @Post('verify-email')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Public()
+  @Get('verify-email')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  verifyEmailFromLink(@Query('token') token: string) {
+    return this.authService.verifyEmail({ token });
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
   }
 
   @Public()

@@ -7,6 +7,7 @@ export class PlaceSubmittedEvent extends BasePlaceManagementEvent {
     public readonly placeId: string,
     public readonly actorUserId: string,
     public readonly partnerId: string,
+    public readonly placeName: string,
   ) {
     super('PlaceSubmittedEvent', placeId);
   }

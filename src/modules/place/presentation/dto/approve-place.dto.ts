@@ -1,1 +1,1 @@
-export class ApprovePlaceDto {}
+export { ApprovePlaceDto } from './placemn-approve.dto';

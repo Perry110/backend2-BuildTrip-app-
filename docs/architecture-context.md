@@ -189,6 +189,49 @@ ml/src/
 
 > Ghi lại mỗi phiên làm việc: ngày, việc đã làm, trạng thái, quyết định quan trọng.
 
+### 2026-04-30 — Refactor review wiring trong PlaceManagementModule
+- **Việc đã làm:** Giữ review bên trong `place.module.ts` nhưng refactor wiring theo pattern `reviews.module` tham chiếu: đăng ký Bull queue cho review events, thêm DI token `PLACE_REVIEW_EVENT_PUBLISHER`, thêm publisher adapter `BullPlaceReviewEventPublisher`, và đăng ký `PlaceRatingSnapshotConsumer` trong providers
+- **Files thay đổi:**
+  - Sửa: `src/modules/place/place.module.ts`
+  - Sửa: `src/modules/place/application/review.di-token.ts`
+  - Tạo mới: `src/modules/place/application/ports/place-review-event-publisher.port.ts`
+  - Tạo mới: `src/modules/place/infrastructure/events/bull-place-review-event.publisher.ts`
+- **Quyết định:** Không tách `PlaceReviewsModule` riêng; vẫn gộp review vào `PlaceManagementModule` theo yêu cầu, nhưng chuẩn hóa queue/provider wiring để đồng bộ với pattern module reviews
+- **Vấn đề còn tồn đọng:** Review flow hiện vẫn dùng `AddReviewUseCase`/`PostgresReviewRepository` cũ, chưa chuyển đầy đủ sang `PlaceReviewService` + repository chuyên biệt như bản tham chiếu
+- **Việc tiếp theo:** Nếu cần parity hoàn toàn với module tham chiếu, tách thêm `PlaceReviewRepository`/`PlaceReviewController`/DTO theo cấu trúc `reviews/*`
+
+### 2026-04-29 — Build Notification Module cho auth email queue
+- **Việc đã làm:** Xây `NotificationModule` mới trong `backend2/src/modules/notification` theo pattern producer/processor của dự án tham chiếu; chuyển auth flow verify/reset email sang enqueue job thay vì gửi SMTP đồng bộ trong request
+- **Files thay đổi:**
+  - Tạo mới: `src/modules/notification/notification.constants.ts`
+  - Tạo mới: `src/modules/notification/notification.types.ts`
+  - Tạo mới: `src/modules/notification/notification.module.ts`
+  - Tạo mới: `src/modules/notification/queue/notification.queue.service.ts`
+  - Tạo mới: `src/modules/notification/queue/notification.processor.ts`
+  - Tạo mới: `src/modules/notification/services/notification.service.ts`
+  - Sửa: `src/app.module.ts`
+  - Sửa: `src/modules/auth/auth.module.ts`
+  - Sửa: `src/modules/auth/auth.service.ts`
+- **Quyết định:** Dùng một queue chung `notification` với template code (`AUTH_VERIFY_EMAIL`, `AUTH_RESET_PASSWORD`) thay vì tạo queue riêng cho auth ở giai đoạn này
+- **Vấn đề còn tồn đọng:** Chưa có persistence table cho notification deliveries/jobs (module hiện lightweight, rely vào Bull retry + logs)
+- **Việc tiếp theo:** Nếu cần audit/dedup nâng cao, bổ sung notification delivery entity + dead-letter tracking ở DB giống project reference
+
+### 2026-04-29 — Cấu hình Email service cho auth verify/reset password
+- **Việc đã làm:** Tạo `MailModule` + `MailService` dùng `@nestjs-modules/mailer`, tích hợp vào `AuthModule`, thêm flow verify email khi register (`verify-email`, `resend-verification`) và gửi email thật ở `forgotPassword`
+- **Files thay đổi:**
+  - Tạo mới: `src/modules/auth/dto/verify-email.dto.ts`
+  - Tạo mới: `src/modules/auth/dto/resend-verification.dto.ts`
+  - Sửa: `src/common/mail/mail.module.ts`
+  - Sửa: `src/common/mail/mail.service.ts`
+  - Sửa: `src/modules/auth/auth.module.ts`
+  - Sửa: `src/modules/auth/auth.controller.ts`
+  - Sửa: `src/modules/auth/auth.service.ts`
+  - Sửa: `src/modules/users/entities/user.entity.ts`
+  - Sửa: `.env.example`
+- **Quyết định:** Đăng ký tài khoản sẽ phát token verify qua Redis TTL 24h và chặn login khi `isEmailVerified=false`; forgot password tiếp tục dùng token hash + Redis TTL 15 phút nhưng chuyển từ log URL sang gửi email SMTP
+- **Vấn đề còn tồn đọng:** Chưa có migration DB để thêm cột `is_email_verified` và `email_verified_at` ở bảng `users`; môi trường production cần cấu hình SMTP credentials thật
+- **Việc tiếp theo:** Thêm migration TypeORM cho 2 cột verify email và cấu hình template email HTML theo branding chính thức
+
 ### 2026-04-22 — Sửa flow create/approve để user request trước, admin duyệt sau
 - **Việc đã làm:** Điều chỉnh logic `place` để user thường (không phải admin) có thể tạo/submit request; ownership theo `ownerId = currentUser.id`; không yêu cầu role `partner` toàn cục ở partner endpoints
 - **Files thay đổi:**

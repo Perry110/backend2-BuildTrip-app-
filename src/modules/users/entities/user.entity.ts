@@ -45,6 +45,12 @@ export class User {
   @Column({ type: 'boolean', default: true, name: 'is_active' })
   isActive!: boolean;
 
+  @Column({ type: 'boolean', default: false, name: 'is_email_verified' })
+  isEmailVerified!: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true, name: 'email_verified_at' })
+  emailVerifiedAt!: Date | null;
+
   @Column({ type: 'jsonb', nullable: true, default: () => "'{}'", name: 'tag_preferences' })
   tagPreferences!: Record<string, unknown>;
 

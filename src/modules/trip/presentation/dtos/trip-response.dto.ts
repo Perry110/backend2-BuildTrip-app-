@@ -1,0 +1,63 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { TripStatus } from '../../domain/enums/trip-status.enum';
+import { TRIP_ITEM_TYPES } from '../../trip-item-type.constants';
+
+export class TripItemResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  placeId!: string;
+
+  @ApiProperty({ enum: TRIP_ITEM_TYPES })
+  type!: string;
+
+  @ApiProperty({ example: '09:00' })
+  startTime!: string;
+
+  @ApiProperty({ example: '11:00' })
+  endTime!: string;
+
+  @ApiPropertyOptional()
+  note?: string | null;
+
+  @ApiProperty()
+  sortOrder!: number;
+}
+
+export class TripDayResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty()
+  dayIndex!: number;
+
+  @ApiProperty({ format: 'date' })
+  date!: string;
+
+  @ApiProperty({ type: [TripItemResponseDto] })
+  items!: TripItemResponseDto[];
+}
+
+export class TripResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty()
+  title!: string;
+
+  @ApiProperty({ format: 'date' })
+  startDate!: string;
+
+  @ApiProperty({ format: 'date' })
+  endDate!: string;
+
+  @ApiProperty({ enum: TripStatus })
+  status!: TripStatus;
+
+  @ApiProperty()
+  version!: number;
+
+  @ApiProperty({ type: [TripDayResponseDto] })
+  days!: TripDayResponseDto[];
+}

@@ -1,7 +1,1 @@
-import { IsNotEmpty, IsString } from 'class-validator';
-
-export class DeletePlaceDto {
-  @IsString()
-  @IsNotEmpty()
-  reason!: string;
-}
+export { DeletePlaceDto } from './placemn-delete.dto';

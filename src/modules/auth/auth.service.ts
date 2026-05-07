@@ -10,14 +10,17 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { Repository } from 'typeorm';
 import { ResponseCommon } from '../../common/dto/response.dto';
+import { NotificationService } from '../notification/services/notification.service';
 import { User } from '../users/entities/user.entity';
 import { RedisService } from '../../shared/redis/redis.service';
 import { JwtTokenService } from './services/jwt-token.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Injectable()
 export class AuthService {
@@ -26,12 +29,14 @@ export class AuthService {
   private readonly loginWindowSeconds = 15 * 60;
   private readonly loginLockSeconds = 15 * 60;
   private readonly passwordResetTokenTtlSeconds = 15 * 60;
+  private readonly emailVerificationTokenTtlSeconds = 24 * 60 * 60;
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly jwtTokenService: JwtTokenService,
     private readonly redisService: RedisService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private toUserResponse(user: User) {
@@ -40,8 +45,45 @@ export class AuthService {
       username: user.username,
       email: user.email,
       role: user.role,
+      isEmailVerified: user.isEmailVerified,
       createdAt: user.createdAt,
     };
+  }
+
+  private getFrontendBaseUrl() {
+    return process.env.FRONTEND_URL?.trim() || 'http://localhost:3000';
+  }
+
+  private getBackendBaseUrl() {
+    return process.env.BACKEND_URL?.trim() || 'http://localhost:5002';
+  }
+
+  private getPasswordResetBaseUrl() {
+    return process.env.RESET_PASSWORD_URL?.trim()
+      || `${this.getFrontendBaseUrl()}/reset-password`;
+  }
+
+  private async issueEmailVerification(user: User) {
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    await this.redisService
+      .getClient()
+      .setex(
+        `auth:email-verify:${tokenHash}`,
+        this.emailVerificationTokenTtlSeconds,
+        user.id,
+      );
+
+    const verifyBaseUrl =
+      process.env.EMAIL_VERIFY_URL?.trim() ||
+      `${this.getBackendBaseUrl()}/api/auth/verify-email`;
+    const separator = verifyBaseUrl.includes('?') ? '&' : '?';
+    const verifyUrl = `${verifyBaseUrl}${separator}token=${rawToken}`;
+    await this.notificationService.notifyVerifyEmail({
+      to: user.email,
+      verifyUrl,
+    });
+    return verifyUrl;
   }
 
   private loginAttemptKey(email: string) {
@@ -137,14 +179,17 @@ export class AuthService {
       email,
       hashedPassword,
       role: 'user',
+      isEmailVerified: false,
+      emailVerifiedAt: null,
     });
     await this.userRepository.save(newUser);
+    await this.issueEmailVerification(newUser);
     this.logger.log(`New user registered: ${newUser.role}`);
 
     return new ResponseCommon(
       HttpStatus.CREATED,
       true,
-      'User registered successfully',
+      'User registered successfully. Please verify your email.',
       {
         user: this.toUserResponse(newUser),
       },
@@ -170,6 +215,22 @@ export class AuthService {
           { reason: 'USER_NOT_FOUND' },
         ),
         HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    if (!user.isEmailVerified) {
+      throw new HttpException(
+        new ResponseCommon(
+          HttpStatus.FORBIDDEN,
+          false,
+          'Email is not verified',
+          null,
+          {
+            reason: 'EMAIL_NOT_VERIFIED',
+            hint: 'Use /auth/resend-verification to receive a new verification email.',
+          },
+        ),
+        HttpStatus.FORBIDDEN,
       );
     }
 
@@ -334,10 +395,13 @@ export class AuthService {
           user.id,
         );
 
-      const frontendBase =
-        process.env.FRONTEND_URL?.trim() || 'http://localhost:3000';
-      const resetUrl = `${frontendBase}/reset-password?token=${rawToken}`;
-      this.logger.warn(`Password reset link for ${email}: ${resetUrl}`);
+      const resetBaseUrl = this.getPasswordResetBaseUrl();
+      const separator = resetBaseUrl.includes('?') ? '&' : '?';
+      const resetUrl = `${resetBaseUrl}${separator}token=${rawToken}`;
+      await this.notificationService.notifyResetPassword({
+        to: email,
+        resetUrl,
+      });
 
       if (process.env.NODE_ENV !== 'production') {
         debugResetUrl = resetUrl;
@@ -349,6 +413,81 @@ export class AuthService {
       true,
       'If this email exists, password reset instructions have been sent.',
       debugResetUrl ? { resetUrl: debugResetUrl } : null,
+    );
+  }
+
+  getForgotPasswordRedirectUrl(token: string) {
+    if (!token?.trim()) {
+      throw new HttpException(
+        new ResponseCommon(
+          HttpStatus.BAD_REQUEST,
+          false,
+          'Reset token is required',
+          null,
+          { reason: 'RESET_TOKEN_REQUIRED' },
+        ),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const resetBaseUrl = this.getPasswordResetBaseUrl();
+    const separator = resetBaseUrl.includes('?') ? '&' : '?';
+    return `${resetBaseUrl}${separator}token=${encodeURIComponent(token)}`;
+  }
+
+  async verifyEmail(dto: VerifyEmailDto) {
+    const tokenHash = createHash('sha256').update(dto.token).digest('hex');
+    const redis = this.redisService.getClient();
+    const userId = await redis.get(`auth:email-verify:${tokenHash}`);
+    if (!userId) {
+      throw new HttpException(
+        new ResponseCommon(
+          HttpStatus.BAD_REQUEST,
+          false,
+          'Invalid or expired verification token',
+          null,
+          { reason: 'EMAIL_VERIFY_TOKEN_INVALID_OR_EXPIRED' },
+        ),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      await redis.del(`auth:email-verify:${tokenHash}`);
+      throw new HttpException(
+        new ResponseCommon(
+          HttpStatus.BAD_REQUEST,
+          false,
+          'Invalid or expired verification token',
+          null,
+          { reason: 'EMAIL_VERIFY_TOKEN_INVALID_OR_EXPIRED' },
+        ),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    user.isEmailVerified = true;
+    user.emailVerifiedAt = new Date();
+    await this.userRepository.save(user);
+    await redis.del(`auth:email-verify:${tokenHash}`);
+
+    return new ResponseCommon(HttpStatus.OK, true, 'Email verified successfully', null);
+  }
+
+  async resendVerification(dto: ResendVerificationDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    if (user && !user.isEmailVerified) {
+      await this.issueEmailVerification(user);
+    }
+
+    return new ResponseCommon(
+      HttpStatus.OK,
+      true,
+      'If this email exists and is not verified, verification instructions have been sent.',
+      null,
     );
   }
 

@@ -7,12 +7,14 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtTokenService } from './services/jwt-token.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { NotificationModule } from '../notification/notification.module';
 import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     TypeOrmModule.forFeature([User]),
+    NotificationModule,
   ],
   controllers: [AuthController],
   providers: [

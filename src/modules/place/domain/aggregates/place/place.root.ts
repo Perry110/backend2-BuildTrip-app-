@@ -141,7 +141,12 @@ export class PlaceRoot {
     }
     this.snapshot.status = PlaceStatus.PENDING;
     this.pendingEvents.push(
-      new PlaceSubmittedEvent(this.snapshot.id, actor.userId, this.snapshot.ownerId),
+      new PlaceSubmittedEvent(
+        this.snapshot.id,
+        actor.userId,
+        this.snapshot.ownerId,
+        this.snapshot.name,
+      ),
     );
   }
 

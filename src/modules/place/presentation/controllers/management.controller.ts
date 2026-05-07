@@ -17,8 +17,8 @@ import { CurrentUser } from '../../../auth/decorators';
 import { JwtAuthGuard } from '../../../auth/guards/jwt-auth.guard';
 import type { JwtUserPayload } from '../../../auth/services/jwt-token.service';
 import { ApprovePlaceUseCase } from '../../application/use-cases/approve-place.use-case';
-import { CreatePlaceDto } from '../dto/create-place.dto';
-import { DeletePlaceDto } from '../dto/delete-place.dto';
+import { CreatePlaceDto } from '../dto/placemn-create.dto';
+import { DeletePlaceDto } from '../dto/placemn-delete.dto';
 import { GetAdminPendingPlacesUseCase } from '../../application/use-cases/get-admin-pending-places.use-case';
 import { GetAdminPlaceUseCase } from '../../application/use-cases/get-admin-place.use-case';
 import { GetAdminPlacesUseCase } from '../../application/use-cases/get-admin-places.use-case';
@@ -28,12 +28,12 @@ import { RejectPlaceUseCase } from '../../application/use-cases/reject-place.use
 import { RestoreOwnPlaceUseCase } from '../../application/use-cases/restore-own-place.use-case';
 import { RestorePlaceByAdminUseCase } from '../../application/use-cases/restore-place-by-admin.use-case';
 import { SubmitPlaceUseCase } from '../../application/use-cases/submit-place.use-case';
-import { UpdatePlaceDto } from '../dto/update-place.dto';
+import { UpdatePlaceDto } from '../dto/placemn-update.dto';
 import { CreatePlaceUseCase } from '../../application/use-cases/create-place.use-case';
 import { DeleteOwnPlaceUseCase } from '../../application/use-cases/delete-own-place.use-case';
 import { DeletePlaceByAdminUseCase } from '../../application/use-cases/delete-place-by-admin.use-case';
-import { ApprovePlaceDto } from '../dto/approve-place.dto';
-import { RejectPlaceDto } from '../dto/reject-place.dto';
+import { ApprovePlaceDto } from '../dto/placemn-approve.dto';
+import { RejectPlaceDto } from '../dto/placemn-reject.dto';
 import { UpdatePlaceUseCase } from '../../application/use-cases/update-place.use-case';
 
 @Controller('admin/places')

@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { AppErrorExceptionFilter } from './core/filters/app-error-exception.filter';
 import {
   LoggingInterceptor,
   TimeoutInterceptor,
@@ -20,6 +21,7 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
+  app.useGlobalFilters(new AppErrorExceptionFilter());
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
     new TimeoutInterceptor(15000),

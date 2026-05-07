@@ -1,6 +1,8 @@
+import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AddReviewUseCase } from './application/use-cases/add-review.use-case';
+import { NotificationModule } from '../notification/notification.module';
+import { PlaceReviewService } from './application/place-review.service';
 import { ApprovePlaceUseCase } from './application/use-cases/approve-place.use-case';
 import { CreatePlaceUseCase } from './application/use-cases/create-place.use-case';
 import { DeleteOwnPlaceUseCase } from './application/use-cases/delete-own-place.use-case';
@@ -16,40 +18,68 @@ import { RestorePlaceByAdminUseCase } from './application/use-cases/restore-plac
 import { SubmitPlaceUseCase } from './application/use-cases/submit-place.use-case';
 import { UpdatePlaceUseCase } from './application/use-cases/update-place.use-case';
 import {
+  PLACE_CATALOG_REPOSITORY,
   PLACE_MANAGEMENT_EVENT_BUS,
   PLACE_MANAGEMENT_REPOSITORY,
 } from './application/management.di-tokens';
-import { REVIEW_REPOSITORY } from './application/ports/review-repository.port';
-import { GetPlaceDetailsHandler } from './application/queries/get-place-details.handler';
-import { SearchNearestHandler } from './application/queries/search-nearest.handler';
+import { PLACE_REVIEW_EVENT_PUBLISHER, PLACE_REVIEW_REPOSITORY } from './application/review.di-token';
+import { PlaceCatalogService } from './application/queries/place-catalog.queries';
+import { PlaceRatingSnapshotService } from './application/queries/place-rating-snapshot.queries';
+import { BullPlaceReviewEventPublisher } from './infrastructure/events/bull-place-review-event.publisher';
 import { NestEventBusAdapter } from './infrastructure/events/nest-event-bus.adapter';
+import {
+  PLACE_RATING_SNAPSHOT_QUEUE,
+  PlaceRatingSnapshotConsumer,
+} from './infrastructure/events/place-rating-snapshot.event';
 import { PlaceMapper } from './infrastructure/persistence/mappers/place.mapper';
 import { PartnerOrmEntity } from './infrastructure/persistence/typeorm/partner.orm-entity';
 import { PlaceCategoryOrmEntity } from './infrastructure/persistence/typeorm/place-category.orm-entity';
 import { PlaceOrmEntity } from './infrastructure/persistence/typeorm/place.orm-entity';
-import { PostgisCatalogRepository } from './infrastructure/persistence/typeorm/repositories/postgis-catalog.repository';
+import { PlaceRatingSnapshotEventOrmEntity } from './infrastructure/persistence/typeorm/place-rating-snapshot-event.orm';
+import { PlaceReviewOrmEntity } from './infrastructure/persistence/typeorm/review.orm-entity';
+import { PlaceCatalogRepository } from './infrastructure/persistence/typeorm/repositories/place-catalog.repository';
 import { PlaceManagementRepository } from './infrastructure/persistence/typeorm/repositories/management.repository';
-import { PostgresReviewRepository } from './infrastructure/persistence/typeorm/repositories/postgres-review.repository';
+import { PlaceReviewRepository } from './infrastructure/persistence/typeorm/repositories/review.repository';
 import { CatalogController } from './presentation/controllers/catalog.controller';
 import {
   AdminPlaceController,
   PartnerPlaceController,
 } from './presentation/controllers/management.controller';
-import { ReviewController } from './presentation/controllers/review.controller';
+import { PlaceReviewController } from './presentation/controllers/review.controller';
+import { User } from '../users/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PlaceOrmEntity, PartnerOrmEntity, PlaceCategoryOrmEntity])],
+  imports: [
+    NotificationModule,
+    TypeOrmModule.forFeature([
+      User,
+      PlaceOrmEntity,
+      PartnerOrmEntity,
+      PlaceCategoryOrmEntity,
+      PlaceRatingSnapshotEventOrmEntity,
+      PlaceReviewOrmEntity,
+    ]),
+    BullModule.registerQueue({
+      name: PLACE_RATING_SNAPSHOT_QUEUE,
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 1000 },
+      },
+    }),
+  ],
   controllers: [
     AdminPlaceController,
     PartnerPlaceController,
     CatalogController,
-    ReviewController,
+    PlaceReviewController,
   ],
   providers: [
     PlaceMapper,
     PlaceManagementRepository,
-    PostgresReviewRepository,
-    PostgisCatalogRepository,
+    PlaceReviewService,
+    PlaceCatalogRepository,
+    BullPlaceReviewEventPublisher,
+    PlaceRatingSnapshotConsumer,
     NestEventBusAdapter,
     {
       provide: PLACE_MANAGEMENT_REPOSITORY,
@@ -60,8 +90,16 @@ import { ReviewController } from './presentation/controllers/review.controller';
       useClass: NestEventBusAdapter,
     },
     {
-      provide: REVIEW_REPOSITORY,
-      useExisting: PostgresReviewRepository,
+      provide: PLACE_CATALOG_REPOSITORY,
+      useClass: PlaceCatalogRepository,
+    },
+    {
+      provide: PLACE_REVIEW_REPOSITORY,
+      useClass: PlaceReviewRepository,
+    },
+    {
+      provide: PLACE_REVIEW_EVENT_PUBLISHER,
+      useClass: BullPlaceReviewEventPublisher,
     },
     CreatePlaceUseCase,
     UpdatePlaceUseCase,
@@ -77,18 +115,9 @@ import { ReviewController } from './presentation/controllers/review.controller';
     GetMyPlacesUseCase,
     RestorePlaceByAdminUseCase,
     RestoreOwnPlaceUseCase,
-    AddReviewUseCase,
-    {
-      provide: SearchNearestHandler,
-      useFactory: (catalogRepo: PostgisCatalogRepository) => new SearchNearestHandler(catalogRepo),
-      inject: [PostgisCatalogRepository],
-    },
-    {
-      provide: GetPlaceDetailsHandler,
-      useFactory: (catalogRepo: PostgisCatalogRepository) => new GetPlaceDetailsHandler(catalogRepo),
-      inject: [PostgisCatalogRepository],
-    },
+    PlaceCatalogService,
+    PlaceRatingSnapshotService,
   ],
-  exports: [PLACE_MANAGEMENT_REPOSITORY],
+  exports: [PLACE_MANAGEMENT_REPOSITORY, PLACE_REVIEW_REPOSITORY, PLACE_REVIEW_EVENT_PUBLISHER, BullModule],
 })
 export class PlaceManagementModule {}
